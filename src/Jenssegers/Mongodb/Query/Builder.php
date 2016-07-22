@@ -183,11 +183,13 @@ class Builder extends BaseBuilder
             // Add grouping columns to the $group part of the aggregation pipeline.
             if ($this->groups) {
                 foreach ($this->groups as $column) {
-                    $group['_id'][$column] = '$' . $column;
+                    $key = str_replace('.', '_', $column);
+
+                    $group['_id'][$key] = '$' . $column;
 
                     // When grouping, also add the $last operator to each grouped field,
                     // this mimics MySQL's behaviour a bit.
-                    $group[$column] = ['$last' => '$' . $column];
+                    $group[$key] = ['$last' => '$' . $column];
                 }
 
                 // Do the same for other columns that are selected.

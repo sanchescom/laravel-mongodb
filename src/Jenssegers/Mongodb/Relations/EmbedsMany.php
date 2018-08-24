@@ -1,5 +1,8 @@
-<?php namespace Jenssegers\Mongodb\Relations;
+<?php
 
+namespace Jenssegers\Mongodb\Relations;
+
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
@@ -8,10 +11,7 @@ use MongoDB\BSON\ObjectID;
 class EmbedsMany extends EmbedsOneOrMany
 {
     /**
-     * Initialize the relation on a set of models.
-     *
-     * @param  array   $models
-     * @param  string  $relation
+     * @inheritdoc
      */
     public function initRelation(array $models, $relation)
     {
@@ -23,9 +23,7 @@ class EmbedsMany extends EmbedsOneOrMany
     }
 
     /**
-     * Get the results of the relationship.
-     *
-     * @return \Illuminate\Database\Eloquent\Collection
+     * @inheritdoc
      */
     public function getResults()
     {
@@ -35,21 +33,20 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Save a new model and attach it to the parent model.
      *
-     * @param  \Illuminate\Database\Eloquent\Model $model
-     * @return \Illuminate\Database\Eloquent\Model
+     * @param  Model $model
+     * @return Model|bool
      */
     public function performInsert(Model $model)
     {
         // Generate a new key if needed.
-        if ($model->getKeyName() == '_id' and ! $model->getKey()) {
+        if ($model->getKeyName() == '_id' && !$model->getKey()) {
             $model->setAttribute('_id', new ObjectID);
         }
 
         // For deeply nested documents, let the parent handle the changes.
         if ($this->isNested()) {
             $this->associate($model);
-
-            return $this->parent->save();
+            return $this->parent->save() ? $model : false;
         }
 
         // Push the new model to the database.
@@ -66,7 +63,7 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Save an existing model and attach it to the parent model.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
+     * @param  Model $model
      * @return Model|bool
      */
     public function performUpdate(Model $model)
@@ -81,12 +78,11 @@ class EmbedsMany extends EmbedsOneOrMany
         // Get the correct foreign key value.
         $foreignKey = $this->getForeignKeyValue($model);
 
-        // Use array dot notation for better update behavior.
-        $values = array_dot($model->getDirty(), $this->localKey . '.$.');
+        $values = $this->getUpdateValues($model->getDirty(), $this->localKey . '.$.');
 
         // Update document in database.
         $result = $this->getBaseQuery()->where($this->localKey . '.' . $model->getKeyName(), $foreignKey)
-                                       ->update($values);
+            ->update($values);
 
         // Attach the model to its parent.
         if ($result) {
@@ -99,7 +95,7 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Delete an existing model and detach it from the parent model.
      *
-     * @param  Model  $model
+     * @param  Model $model
      * @return int
      */
     public function performDelete(Model $model)
@@ -126,12 +122,12 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Associate the model instance to the given parent, without saving it to the database.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @return \Illuminate\Database\Eloquent\Model
+     * @param  Model $model
+     * @return Model
      */
     public function associate(Model $model)
     {
-        if (! $this->contains($model)) {
+        if (!$this->contains($model)) {
             return $this->associateNew($model);
         } else {
             return $this->associateExisting($model);
@@ -141,7 +137,7 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Dissociate the model instance from the given parent, without saving it to the database.
      *
-     * @param  mixed  $ids
+     * @param  mixed $ids
      * @return int
      */
     public function dissociate($ids = [])
@@ -170,7 +166,7 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Destroy the embedded models for the given IDs.
      *
-     * @param  mixed  $ids
+     * @param  mixed $ids
      * @return int
      */
     public function destroy($ids = [])
@@ -212,7 +208,7 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Destroy alias.
      *
-     * @param  mixed  $ids
+     * @param  mixed $ids
      * @return int
      */
     public function detach($ids = [])
@@ -223,8 +219,8 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Save alias.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @return \Illuminate\Database\Eloquent\Model
+     * @param  Model $model
+     * @return Model
      */
     public function attach(Model $model)
     {
@@ -234,13 +230,13 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Associate a new model instance to the given parent, without saving it to the database.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @return \Illuminate\Database\Eloquent\Model
+     * @param  Model $model
+     * @return Model
      */
     protected function associateNew($model)
     {
         // Create a new key if needed.
-        if (! $model->getAttribute('_id')) {
+        if (!$model->getAttribute('_id')) {
             $model->setAttribute('_id', new ObjectID);
         }
 
@@ -255,8 +251,8 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Associate an existing model instance to the given parent, without saving it to the database.
      *
-     * @param  \Illuminate\Database\Eloquent\Model  $model
-     * @return \Illuminate\Database\Eloquent\Model
+     * @param  Model $model
+     * @return Model
      */
     protected function associateExisting($model)
     {
@@ -281,8 +277,8 @@ class EmbedsMany extends EmbedsOneOrMany
     /**
      * Get a paginator for the "select" statement.
      *
-     * @param  int  $perPage
-     * @return \Illuminate\Pagination\Paginator
+     * @param  int $perPage
+     * @return \Illuminate\Pagination\AbstractPaginator
      */
     public function paginate($perPage = null)
     {
@@ -302,9 +298,7 @@ class EmbedsMany extends EmbedsOneOrMany
     }
 
     /**
-     * Get the embedded records array.
-     *
-     * @return array
+     * @inheritdoc
      */
     protected function getEmbedded()
     {
@@ -312,13 +306,11 @@ class EmbedsMany extends EmbedsOneOrMany
     }
 
     /**
-     * Set the embedded records array.
-     *
-     * @param  array  $models
+     * @inheritdoc
      */
     protected function setEmbedded($models)
     {
-        if (! is_array($models)) {
+        if (!is_array($models)) {
             $models = [$models];
         }
 
@@ -326,15 +318,11 @@ class EmbedsMany extends EmbedsOneOrMany
     }
 
     /**
-     * Handle dynamic method calls to the relationship.
-     *
-     * @param  string  $method
-     * @param  array   $parameters
-     * @return mixed
+     * @inheritdoc
      */
     public function __call($method, $parameters)
     {
-        if (method_exists('Illuminate\Database\Eloquent\Collection', $method)) {
+        if (method_exists(Collection::class, $method)) {
             return call_user_func_array([$this->getResults(), $method], $parameters);
         }
 

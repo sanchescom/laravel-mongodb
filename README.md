@@ -39,6 +39,10 @@ composer require jenssegers/mongodb
  5.0.x    | 2.1.x
  5.1.x    | 2.2.x or 3.0.x
  5.2.x    | 2.3.x or 3.0.x
+ 5.3.x    | 3.1.x or 3.2.x
+ 5.4.x    | 3.2.x
+ 5.5.x    | 3.3.x
+ 5.6.x    | 3.4.x
 
 And add the service provider in `config/app.php`:
 
@@ -49,7 +53,7 @@ Jenssegers\Mongodb\MongodbServiceProvider::class,
 For usage with [Lumen](http://lumen.laravel.com), add the service provider in `bootstrap/app.php`. In this file, you will also need to enable Eloquent. You must however ensure that your call to `$app->withEloquent();` is **below** where you have registered the `MongodbServiceProvider`:
 
 ```php
-$app->register('Jenssegers\Mongodb\MongodbServiceProvider');
+$app->register(Jenssegers\Mongodb\MongodbServiceProvider::class);
 
 $app->withEloquent();
 ```
@@ -100,10 +104,19 @@ Embedded relations now return an `Illuminate\Database\Eloquent\Collection` rathe
 $books = $user->books()->sortBy('title');
 ```
 
+Testing
+-------
+
+To run the test for this package, run:
+
+```
+docker-compose up
+```
+
 Configuration
 -------------
 
-Change your default database connection name in `app/config/database.php`:
+Change your default database connection name in `config/database.php`:
 
 ```php
 'default' => env('DB_CONNECTION', 'mongodb'),
@@ -119,7 +132,7 @@ And add a new mongodb connection:
     'database' => env('DB_DATABASE'),
     'username' => env('DB_USERNAME'),
     'password' => env('DB_PASSWORD'),
-    'options' => [
+    'options'  => [
         'database' => 'admin' // sets the authentication database required by mongo 3
     ]
 ],
@@ -135,9 +148,23 @@ You can connect to multiple servers or replica sets with the following configura
     'database' => env('DB_DATABASE'),
     'username' => env('DB_USERNAME'),
     'password' => env('DB_PASSWORD'),
-    'options'  => ['replicaSet' => 'replicaSetName']
+    'options'  => [
+		'replicaSet' => 'replicaSetName'
+	]
 ],
 ```
+
+Alternatively, you can use MongoDB connection string:
+
+```php
+'mongodb' => [
+    'driver'   => 'mongodb',
+    'dsn' => env('DB_DSN'),
+    'database' => env('DB_DATABASE'),
+],
+```
+
+Please refer to MongoDB official docs for its URI format: https://docs.mongodb.com/manual/reference/connection-string/
 
 Eloquent
 --------
@@ -150,7 +177,7 @@ use Jenssegers\Mongodb\Eloquent\Model as Eloquent;
 class User extends Eloquent {}
 ```
 
-Note that we did not tell Eloquent which collection to use for the `User` model. Just like the original Eloquent, the lower-case, plural name of the class will be used as the table name unless another name is explicitly specified. You may specify a custom collection (alias for table) by defining a `collection` property on your model:
+Note that we did not tell Eloquent which collection to use for the `User` model. Just like the original Eloquent, the lower-case, plural name of the class will be used as the collection name unless another name is explicitly specified. You may specify a custom collection (alias for table) by defining a `collection` property on your model:
 
 ```php
 use Jenssegers\Mongodb\Eloquent\Model as Eloquent;
@@ -178,10 +205,10 @@ Everything else (should) work just like the original Eloquent model. Read more a
 
 ### Optional: Alias
 
-You may also register an alias for the MongoDB model by adding the following to the alias array in `app/config/app.php`:
+You may also register an alias for the MongoDB model by adding the following to the alias array in `config/app.php`:
 
 ```php
-'Moloquent'       => 'Jenssegers\Mongodb\Eloquent\Model',
+'Moloquent'       => Jenssegers\Mongodb\Eloquent\Model::class,
 ```
 
 This will allow you to use the registered alias like:
@@ -230,9 +257,31 @@ Supported operations are:
  - hasCollection
  - index and dropIndex (compound indexes supported as well)
  - unique
- - background, sparse, expire (MongoDB specific)
+ - background, sparse, expire, geospatial (MongoDB specific)
 
 All other (unsupported) operations are implemented as dummy pass-through methods, because MongoDB does not use a predefined schema. Read more about the schema builder on http://laravel.com/docs/schema
+
+### Geospatial indexes
+
+Geospatial indexes are handy for querying location-based documents. They come in two forms: `2d` and `2dsphere`. Use the schema builder to add these to a collection.
+
+To add a `2d` index:
+
+```php
+Schema::create('users', function($collection)
+{
+    $collection->geospatial('name', '2d');
+});
+```
+
+To add a `2dsphere` index:
+
+```php
+Schema::create('users', function($collection)
+{
+    $collection->geospatial('name', '2dsphere');
+});
+```
 
 Extensions
 ----------
@@ -259,6 +308,21 @@ If you want to use MongoDB as your database backend, change the the driver in `c
         'queue'  => 'default',
         'expire' => 60,
     ],
+```
+
+If you want to use MongoDB to handle failed jobs, change the database in `config/queue.php`:
+
+```php
+'failed' => [
+    'database' => 'mongodb',
+    'table'    => 'failed_jobs',
+    ],
+```
+
+And add the service provider in `config/app.php`:
+
+```php
+Jenssegers\Mongodb\MongodbQueueServiceProvider::class,
 ```
 
 ### Sentry
@@ -389,6 +453,15 @@ Aggregations can be combined with **where**:
 $sold = Orders::where('sold', true)->sum('price');
 ```
 
+Aggregations can be also used on subdocuments:
+
+```php
+$total = Order::max('suborder.price');
+...
+```
+
+**NOTE**: this aggreagtion only works with single subdocuments (like embedsOne) not subdocument arrays (like embedsMany)
+
 **Like**
 
 ```php
@@ -466,10 +539,10 @@ User::where('tags', 'size', 3)->get();
 Selects documents where values match a specified regular expression.
 
 ```php
-User::where('name', 'regex', new MongoRegex("/.*doe/i"))->get();
+User::where('name', 'regex', new \MongoDB\BSON\Regex("/.*doe/i"))->get();
 ```
 
-**NOTE:** you can also use the Laravel regexp operations. These are a bit more flexible and will automatically convert your regular expression string to a MongoRegex object.
+**NOTE:** you can also use the Laravel regexp operations. These are a bit more flexible and will automatically convert your regular expression string to a MongoDB\BSON\Regex object.
 
 ```php
 User::where('name', 'regexp', '/.*doe/i'))->get();
@@ -496,6 +569,72 @@ Performs a modulo operation on the value of a field and selects documents with a
 ```php
 User::where('age', 'mod', [10, 0])->get();
 ```
+
+**Near**
+
+**NOTE:** Specify coordinates in this order: `longitude, latitude`.
+
+```php
+$users = User::where('location', 'near', [
+	'$geometry' => [
+        'type' => 'Point',
+	    'coordinates' => [
+	        -0.1367563,
+            51.5100913,
+        ],
+    ],
+    '$maxDistance' => 50,
+]);
+```
+
+**GeoWithin**
+
+```php
+$users = User::where('location', 'geoWithin', [
+	'$geometry' => [
+        'type' => 'Polygon',
+	    'coordinates' => [[
+            [
+                -0.1450383,
+                51.5069158,
+            ],       
+            [
+                -0.1367563,
+                51.5100913,
+            ],       
+            [
+                -0.1270247,
+                51.5013233,
+            ],  
+            [
+                -0.1450383,
+                51.5069158,
+            ],
+        ]],
+    ],
+]);
+```
+
+**GeoIntersects**
+
+```php
+$locations = Location::where('location', 'geoIntersects', [
+    '$geometry' => [
+        'type' => 'LineString',
+        'coordinates' => [
+            [
+                -0.144044,
+                51.515215,
+            ],
+            [
+                -0.129545,
+                51.507864,
+            ],
+        ],
+    ],
+]);
+```
+
 
 **Where**
 
@@ -620,7 +759,7 @@ class User extends Eloquent {
 
     public function groups()
     {
-        return $this->belongsToMany('Group', null, 'users', 'groups');
+        return $this->belongsToMany('Group', null, 'user_ids', 'group_ids');
     }
 
 }
@@ -826,7 +965,7 @@ $cursor = DB::collection('users')->raw(function($collection)
 Optional: if you don't pass a closure to the raw method, the internal MongoCollection object will be accessible:
 
 ```php
-$model = User::raw()->findOne(['age' => array('$lt' => 18]));
+$model = User::raw()->findOne(['age' => array('$lt' => 18)]);
 ```
 
 The internal MongoClient and MongoDB objects can be accessed like this:
@@ -860,7 +999,8 @@ DB::collection('users')->where('name', 'John')
 You can apply projections to your queries using the `project` method.
 
 ```php
-DB::collection('items')->project(['tags' => array('$slice' => 1]))->get();
+DB::collection('items')->project(['tags' => ['$slice' => 1]])->get();
+DB::collection('items')->project(['tags' => ['$slice' => [3, 7]]])->get();
 ```
 
 **Projections with Pagination**

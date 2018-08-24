@@ -44,7 +44,7 @@ class ConnectionTest extends TestCase
     // public function testDynamic()
     // {
     //     $dbs = DB::connection('mongodb')->listCollections();
-    //     $this->assertTrue(is_array($dbs));
+    //     $this->assertInternalType('array', $dbs);
     // }
 
     // public function testMultipleConnections()
@@ -59,29 +59,29 @@ class ConnectionTest extends TestCase
     //     $mongoclient = $connection->getMongoClient();
 
     //     $hosts = $mongoclient->getHosts();
-    //     $this->assertEquals(1, count($hosts));
+    //     $this->assertCount(1, $hosts);
     // }
 
     public function testQueryLog()
     {
         DB::enableQueryLog();
 
-        $this->assertEquals(0, count(DB::getQueryLog()));
+        $this->assertCount(0, DB::getQueryLog());
 
         DB::collection('items')->get();
-        $this->assertEquals(1, count(DB::getQueryLog()));
+        $this->assertCount(1, DB::getQueryLog());
 
         DB::collection('items')->insert(['name' => 'test']);
-        $this->assertEquals(2, count(DB::getQueryLog()));
+        $this->assertCount(2, DB::getQueryLog());
 
         DB::collection('items')->count();
-        $this->assertEquals(3, count(DB::getQueryLog()));
+        $this->assertCount(3, DB::getQueryLog());
 
         DB::collection('items')->where('name', 'test')->update(['name' => 'test']);
-        $this->assertEquals(4, count(DB::getQueryLog()));
+        $this->assertCount(4, DB::getQueryLog());
 
         DB::collection('items')->where('name', 'test')->delete();
-        $this->assertEquals(5, count(DB::getQueryLog()));
+        $this->assertCount(5, DB::getQueryLog());
     }
 
     public function testSchemaBuilder()
@@ -98,35 +98,30 @@ class ConnectionTest extends TestCase
 
     public function testAuth()
     {
+        $host = Config::get('database.connections.mongodb.host');
         Config::set('database.connections.mongodb.username', 'foo');
         Config::set('database.connections.mongodb.password', 'bar');
-        $host = Config::get('database.connections.mongodb.host');
-        $port = Config::get('database.connections.mongodb.port', 27017);
-        $database = Config::get('database.connections.mongodb.database');
+        Config::set('database.connections.mongodb.options.database', 'custom');
 
-        // $this->setExpectedExceptionRegExp('MongoConnectionException', "/Failed to connect to: $host:$port: Authentication failed on database '$database' with username 'foo': auth fail/");
         $connection = DB::connection('mongodb');
+        $this->assertEquals('mongodb://' . $host . '/custom', (string) $connection->getMongoClient());
     }
 
-    public function testCustomPort()
+    public function testCustomHostAndPort()
     {
-        $port = 27000;
-        Config::set('database.connections.mongodb.port', $port);
-        $host = Config::get('database.connections.mongodb.host');
-        $database = Config::get('database.connections.mongodb.database');
+        Config::set('database.connections.mongodb.host', 'db1');
+        Config::set('database.connections.mongodb.port', 27000);
 
-        // $this->setExpectedException('MongoConnectionException', "Failed to connect to: $host:$port: Connection refused");
         $connection = DB::connection('mongodb');
+        $this->assertEquals("mongodb://db1:27000", (string) $connection->getMongoClient());
     }
 
     public function testHostWithPorts()
     {
-        $hosts = ['localhost:27001', 'localhost:27002'];
         Config::set('database.connections.mongodb.port', 27000);
-        Config::set('database.connections.mongodb.host', ['localhost:27001', 'localhost:27002']);
-        $database = Config::get('database.connections.mongodb.database');
+        Config::set('database.connections.mongodb.host', ['db1:27001', 'db2:27002', 'db3:27000']);
 
-        // $this->setExpectedException('MongoConnectionException', "Failed to connect to: " . $hosts[0] . ": Connection refused; Failed to connect to: " . $hosts[1] . ": Connection refused");
         $connection = DB::connection('mongodb');
+        $this->assertEquals('mongodb://db1:27001,db2:27002,db3:27000', (string) $connection->getMongoClient());
     }
 }

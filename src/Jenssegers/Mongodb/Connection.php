@@ -249,6 +249,42 @@ class Connection extends BaseConnection
     }
 
     /**
+     * Start a new database transaction.
+     *
+     * @return void
+     */
+    public function beginTransaction()
+    {
+        ++$this->transactions;
+
+        $this->fireConnectionEvent('beganTransaction');
+    }
+
+    /**
+     * Commit the active database transaction.
+     *
+     * @return void
+     */
+    public function commit()
+    {
+        --$this->transactions;
+
+        $this->fireConnectionEvent('committed');
+    }
+
+    /**
+     * Rollback the active database transaction.
+     *
+     * @return void
+     */
+    public function rollBack()
+    {
+        $this->transactions = max(0, $this->transactions - 1);
+
+        $this->fireConnectionEvent('rollingBack');
+    }
+
+    /**
      * Dynamically pass methods to the connection.
      *
      * @param  string $method

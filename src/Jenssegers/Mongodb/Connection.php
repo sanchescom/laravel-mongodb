@@ -275,9 +275,10 @@ class Connection extends BaseConnection
     /**
      * Rollback the active database transaction.
      *
+     * @param null $toLevel
      * @return void
      */
-    public function rollBack()
+    public function rollBack($toLevel = null)
     {
         $this->transactions = max(0, $this->transactions - 1);
 
